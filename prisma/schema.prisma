@@ -1,0 +1,49 @@
+// This is your Prisma schema file
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  documents     Document[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Document {
+  id          String    @id @default(cuid())
+  title       String
+  content     String    @db.Text
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  isPublic    Boolean   @default(false)
+  tags        String[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tasks       Task[]
+  aiGenerated Boolean   @default(false)
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String    @db.Text
+  status      TaskStatus @default(PENDING)
+  documentId  String
+  document    Document  @relation(fields: [documentId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+} 
