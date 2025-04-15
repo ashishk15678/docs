@@ -1,4 +1,7 @@
+import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/react";
+import { Toaster } from "@/components/ui/toaster";
 
 export default function RootLayout({
     children,
@@ -7,7 +10,11 @@ export default function RootLayout({
 }) {
     return (
         <html>
-            <body>{children}</body>
+            <ClerkProvider>
+                <body>{children}</body>
+                <Analytics />
+                <Toaster />
+            </ClerkProvider>
         </html>
     );
 }

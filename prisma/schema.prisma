@@ -8,42 +8,382 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Base user model for authentication
 model User {
   id            String    @id @default(cuid())
+  clerkId       String    @unique
   email         String    @unique
   name          String?
+  avatar        String?   // Profile picture URL
+  bio           String?   // User biography
+  settings      Json?     // User preferences and settings
+  role          UserRole  @default(USER)
+  status        UserStatus @default(ACTIVE)
   documents     Document[]
+  presentations Presentation[]
+  spreadsheets  Spreadsheet[]
+  folders       Folder[]
+  collaborations Collaboration[]
+  teams         TeamMember[]
+  comments      Comment[]
+  activities    Activity[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  clerkUser     ClerkUser?
+
+  @@index([email])
+  @@index([clerkId])
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// Teams for organization and collaboration
+model Team {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  logo        String?   // Team logo URL
+  members     TeamMember[]
+  folders     Folder[]
+  settings    Json?     // Team settings and preferences
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model TeamMember {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  role      TeamRole
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, teamId])
+  @@index([userId])
+  @@index([teamId])
+}
+
+enum TeamRole {
+  MEMBER
+  ADMIN
+  OWNER
+}
+
+// Base content models (separated for PostgreSQL compatibility)
+model Document {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  content       String    @db.Text
+  format        DocumentFormat @default(MARKDOWN)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId      String?
+  folder        Folder?   @relation(fields: [folderId], references: [id])
+  isPublic      Boolean   @default(false)
+  isArchived    Boolean   @default(false)
+  version       Int       @default(1)
+  aiGenerated   Boolean   @default(false)
+  tasks         Task[]
+  tags          TagsOnDocuments[]
+  collaborations Collaboration[]
+  comments      Comment[]
+  activities    Activity[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([folderId])
+}
+
+model Presentation {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  slides        Json
+  theme         String?
+  transitions   Json?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId      String?
+  folder        Folder?   @relation(fields: [folderId], references: [id])
+  isPublic      Boolean   @default(false)
+  isArchived    Boolean   @default(false)
+  version       Int       @default(1)
+  aiGenerated   Boolean   @default(false)
+  tags          TagsOnPresentations[]
+  collaborations Collaboration[]
+  comments      Comment[]
+  activities    Activity[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([folderId])
+}
+
+model Spreadsheet {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  data          Json
+  settings      Json?
+  formulas      Json?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId      String?
+  folder        Folder?   @relation(fields: [folderId], references: [id])
+  isPublic      Boolean   @default(false)
+  isArchived    Boolean   @default(false)
+  version       Int       @default(1)
+  aiGenerated   Boolean   @default(false)
+  tags          TagsOnSpreadsheets[]
+  collaborations Collaboration[]
+  comments      Comment[]
+  activities    Activity[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([folderId])
+}
+
+enum DocumentFormat {
+  MARKDOWN
+  HTML
+  PLAIN_TEXT
+}
+
+// Improved folder system
+model Folder {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  icon          String?   // Folder icon
+  color         String?   // Folder color
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId        String?
+  team          Team?     @relation(fields: [teamId], references: [id])
+  parentId      String?
+  parent        Folder?   @relation("FolderToFolder", fields: [parentId], references: [id])
+  subfolders    Folder[]  @relation("FolderToFolder")
+  documents     Document[]
+  presentations Presentation[]
+  spreadsheets  Spreadsheet[]
+  isArchived    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([teamId])
+  @@index([parentId])
+}
+
+model Tag {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  color         String?
+  documents     TagsOnDocuments[]
+  presentations TagsOnPresentations[]
+  spreadsheets  TagsOnSpreadsheets[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
 
-model Document {
-  id          String    @id @default(cuid())
-  title       String
-  content     String    @db.Text
-  userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  isPublic    Boolean   @default(false)
-  tags        String[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  tasks       Task[]
-  aiGenerated Boolean   @default(false)
+// Junction tables for many-to-many relationships
+model TagsOnDocuments {
+  tagId       String
+  documentId  String
+  tag         Tag      @relation(fields: [tagId], references: [id])
+  document    Document @relation(fields: [documentId], references: [id])
+  assignedAt  DateTime @default(now())
+
+  @@id([tagId, documentId])
+  @@index([tagId])
+  @@index([documentId])
 }
 
+model TagsOnPresentations {
+  tagId          String
+  presentationId String
+  tag            Tag          @relation(fields: [tagId], references: [id])
+  presentation   Presentation @relation(fields: [presentationId], references: [id])
+  assignedAt     DateTime     @default(now())
+
+  @@id([tagId, presentationId])
+  @@index([tagId])
+  @@index([presentationId])
+}
+
+model TagsOnSpreadsheets {
+  tagId         String
+  spreadsheetId String
+  tag           Tag         @relation(fields: [tagId], references: [id])
+  spreadsheet   Spreadsheet @relation(fields: [spreadsheetId], references: [id])
+  assignedAt    DateTime    @default(now())
+
+  @@id([tagId, spreadsheetId])
+  @@index([tagId])
+  @@index([spreadsheetId])
+}
+
+// Enhanced collaboration system
+model Collaboration {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentId    String?
+  document      Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  presentationId String?
+  presentation  Presentation? @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  spreadsheetId String?
+  spreadsheet   Spreadsheet? @relation(fields: [spreadsheetId], references: [id], onDelete: Cascade)
+  role          CollaborationRole
+  permissions   Json?     // Detailed permission settings
+  expiresAt     DateTime? // Optional expiration for temporary access
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([documentId])
+  @@index([presentationId])
+  @@index([spreadsheetId])
+}
+
+enum CollaborationRole {
+  VIEWER
+  COMMENTER
+  EDITOR
+  ADMIN
+}
+
+// Comments system
+model Comment {
+  id          String    @id @default(cuid())
+  content     String    @db.Text
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentId  String?
+  document    Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  presentationId String?
+  presentation Presentation? @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  spreadsheetId String?
+  spreadsheet  Spreadsheet? @relation(fields: [spreadsheetId], references: [id], onDelete: Cascade)
+  parentId    String?   // For nested comments
+  parent      Comment?  @relation("CommentToComment", fields: [parentId], references: [id])
+  replies     Comment[] @relation("CommentToComment")
+  isResolved  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([documentId])
+  @@index([presentationId])
+  @@index([spreadsheetId])
+  @@index([parentId])
+}
+
+// Activity tracking
+model Activity {
+  id          String    @id @default(cuid())
+  type        ActivityType
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentId  String?
+  document    Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  presentationId String?
+  presentation Presentation? @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  spreadsheetId String?
+  spreadsheet  Spreadsheet? @relation(fields: [spreadsheetId], references: [id], onDelete: Cascade)
+  metadata    Json?     // Additional activity details
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([documentId])
+  @@index([presentationId])
+  @@index([spreadsheetId])
+  @@index([type])
+}
+
+enum ActivityType {
+  CREATE
+  UPDATE
+  DELETE
+  SHARE
+  COMMENT
+  RESOLVE_COMMENT
+  VERSION_UPDATE
+  PERMISSION_CHANGE
+}
+
+// Enhanced task system
 model Task {
   id          String    @id @default(cuid())
   title       String
-  description String    @db.Text
+  description String?   @db.Text
   status      TaskStatus @default(PENDING)
+  priority    TaskPriority @default(MEDIUM)
   documentId  String
   document    Document  @relation(fields: [documentId], references: [id])
+  assignedTo  String?   // User ID
+  dueDate     DateTime?
+  completedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([documentId])
+  @@index([status])
+  @@index([assignedTo])
 }
 
 enum TaskStatus {
   PENDING
   IN_PROGRESS
+  IN_REVIEW
   COMPLETED
+  ARCHIVED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// Add this model to your schema
+model ClerkUser {
+  id            String    @id
+  firstName     String?
+  lastName      String?
+  emailAddress  String    @unique
+  imageUrl      String?
+  primaryEmail  String?
+  primaryPhoneNumber String?
+  passwordEnabled Boolean @default(false)
+  totpEnabled   Boolean  @default(false)
+  backupCodeEnabled Boolean @default(false)
+  twoFactorEnabled Boolean @default(false)
+  banned        Boolean  @default(false)
+  lastSignInAt  DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  // Reference to the main User model
+  user          User?    @relation(fields: [userId], references: [id])
+  userId        String?  @unique
+
+  @@index([emailAddress])
 } 
